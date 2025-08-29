@@ -46,63 +46,57 @@ class PCTrainer(Trainer):
         return indices
 
     def training_step(self, model, inputs, num_items_in_batch):
-        # 1. Decay Factor (lambda_w) 업데이트
-        total_steps = self.args.max_steps if self.args.max_steps > 0 else self.args.num_train_epochs * len(self.get_train_dataloader())
-        current_step = self.state.global_step
-        
-        q = total_steps * 0.8
-        if current_step < q:
-            lambda_value = 1.0 - (current_step / q)
+        # === 수정된 total_steps 계산: optimizer(업데이트) 스텝 기준 ===
+        if self.args.max_steps > 0:
+            total_update_steps = self.args.max_steps
+        else:
+            micro_steps_per_epoch = len(self.get_train_dataloader())
+            update_steps_per_epoch = math.ceil(micro_steps_per_epoch / self.args.gradient_accumulation_steps)
+            total_update_steps = int(self.args.num_train_epochs * update_steps_per_epoch)
+
+        current_update_step = self.state.global_step  # 이 값은 '업데이트 스텝'에서만 증가합니다
+
+        q = int(total_update_steps * 0.8)
+        if current_update_step < q:
+            lambda_value = 1.0 - (current_update_step / q)
         else:
             lambda_value = 0.0
-            
-        # PCLoraLayer에 직접 lambda_w 값을 설정
-        for name, module in model.named_modules():
+
+        for _, module in model.named_modules():
             if hasattr(module, 'set_lambda_w'):
                 module.set_lambda_w(lambda_value)
-        
-        # 2. 부모 클래스의 training_step 로직 호출
+
         return super().training_step(model, inputs, num_items_in_batch)
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
-        # 학습 시에는 hidden_states 필요, 평가 시에는 False
-        output_hidden_states = model.training  # True during train, False during eval
+        # 학습 시 hidden_states 필요
+        output_hidden_states = model.training
+        labels = inputs.pop("labels")
+
+        # student forward
         student_outputs = model(**inputs, output_hidden_states=output_hidden_states)
 
-        # KD loss는 학습 시만 계산
+        # teacher forward (no grad)
         if model.training:
             with torch.no_grad():
                 teacher_outputs = self.teacher_model(**inputs, output_hidden_states=True)
 
-            student_features = student_outputs.hidden_states
-            teacher_features = [f.detach() for f in teacher_outputs.hidden_states]
-
             kd_losses = []
             for idx in self.lora_layers_indices:
-                if idx < len(student_features) and idx < len(teacher_features):
-                    s_feat = student_features[idx]
-                    t_feat = teacher_features[idx]
+                if idx < len(student_outputs.hidden_states) and idx < len(teacher_outputs.hidden_states):
+                    s_feat = student_outputs.hidden_states[idx]
+                    t_feat = teacher_outputs.hidden_states[idx]
                     if s_feat.shape == t_feat.shape:
                         kd_losses.append(F.mse_loss(s_feat, t_feat))
 
-            if kd_losses:
-                LfeatKD = torch.stack(kd_losses).mean()
-            else:
-                LfeatKD = torch.tensor(0.0, device=student_outputs.logits.device)
-
+            LfeatKD = torch.stack(kd_losses).mean() if kd_losses else torch.tensor(0.0, device=student_outputs.logits.device)
         else:
-            # 평가 시 KD loss는 0
             LfeatKD = torch.tensor(0.0, device=student_outputs.logits.device)
 
-        # Task loss 계산
-        labels = inputs.get("labels")
-        logits = student_outputs.get("logits")
+        # Task loss
+        logits = student_outputs.logits
         Ltask = CrossEntropyLoss()(logits.view(-1, model.num_labels), labels.view(-1))
 
         total_loss = self.alpha * Ltask + (1.0 - self.alpha) * LfeatKD
-
-        # total_loss 항상 requires_grad=True 보장 (학습 시만)
-        if model.training and not total_loss.requires_grad:
-            total_loss = total_loss.to(logits.device).requires_grad_()
 
         return (total_loss, student_outputs) if return_outputs else total_loss
