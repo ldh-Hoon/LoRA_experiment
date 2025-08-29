@@ -175,7 +175,7 @@ class ExperimentRunner:
 
     def _setup_trainer(self):
         training_args = TrainingArguments(
-            output_dir=f"./results/{self.task}/{self.config['model']["peft_method"]}/{self.config['model']['pretrained_model_name'].replace('/', '-')}",
+            output_dir=f"./results/{self.task}/{self.config['model']['peft_method']}/{self.config['model']['pretrained_model_name'].replace('/', '-')}",
             num_train_epochs=self.config['training']['epochs'],
             per_device_train_batch_size=self.config['training']['batch_size'],
             per_device_eval_batch_size=self.config['training']['batch_size'],

@@ -26,7 +26,7 @@ dataset:
   validation_split: "validation" # validation, test etc
 
 training:
-  epochs: 1
+  epochs: 10
   batch_size: 1
   learning_rate: 1e-5
   weight_decay: 0.01
