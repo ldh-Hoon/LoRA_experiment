@@ -118,7 +118,6 @@ class ExperimentRunner:
             }
             if is_pclora:
                 model_auto_config_params["output_hidden_states"] = True
-                print("PCLoRA output_hidden_states = True")
 
             model_auto_config = AutoConfig.from_pretrained(**model_auto_config_params)
             

@@ -18,6 +18,12 @@ class PCTrainer(Trainer):
         for param in self.teacher_model.parameters():
             param.requires_grad = False
         self.teacher_model.eval()
+
+        for name, param in self.model.named_parameters():
+            if "lora" in name.lower():
+                param.requires_grad = True
+            else:
+                param.requires_grad = False 
         
         # 2. PC-LoRA 레이어 인덱스 찾기
         self.lora_layers_indices = self._get_lora_layer_indices()
