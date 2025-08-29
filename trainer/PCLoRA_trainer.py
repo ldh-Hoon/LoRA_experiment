@@ -3,6 +3,7 @@ from transformers import Trainer
 from torch.nn import CrossEntropyLoss, MSELoss
 import torch.nn.functional as F
 from peft import PeftModel, PCLoraLayer
+import math
 
 class PCTrainer(Trainer):
     def __init__(self, *args, alpha: float = 0.2, **kwargs):
@@ -69,14 +70,13 @@ class PCTrainer(Trainer):
         return super().training_step(model, inputs, num_items_in_batch)
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
-        # 학습 시 hidden_states 필요
         output_hidden_states = model.training
         labels = inputs.pop("labels")
 
         # student forward
         student_outputs = model(**inputs, output_hidden_states=output_hidden_states)
+        logits = student_outputs.logits
 
-        # teacher forward (no grad)
         if model.training:
             with torch.no_grad():
                 teacher_outputs = self.teacher_model(**inputs, output_hidden_states=True)
@@ -89,12 +89,14 @@ class PCTrainer(Trainer):
                     if s_feat.shape == t_feat.shape:
                         kd_losses.append(F.mse_loss(s_feat, t_feat))
 
-            LfeatKD = torch.stack(kd_losses).mean() if kd_losses else torch.tensor(0.0, device=student_outputs.logits.device)
+            if kd_losses:
+                LfeatKD = torch.stack(kd_losses).mean()
+            else:
+                LfeatKD = logits.new_zeros(1).mean()   # ✅ grad-safe zero
         else:
-            LfeatKD = torch.tensor(0.0, device=student_outputs.logits.device)
+            LfeatKD = logits.new_zeros(1).mean()
 
         # Task loss
-        logits = student_outputs.logits
         Ltask = CrossEntropyLoss()(logits.view(-1, model.num_labels), labels.view(-1))
 
         total_loss = self.alpha * Ltask + (1.0 - self.alpha) * LfeatKD
