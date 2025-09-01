@@ -69,9 +69,7 @@ class PCTrainer(Trainer):
         else:
             lambda_value = 0.0
 
-        for _, module in model.named_modules():
-            if hasattr(module, 'set_lambda_w'):
-                module.set_lambda_w(lambda_value)
+        model.set_all_lambda_w(lambda_value)
 
         return super().training_step(model, inputs, num_items_in_batch)
 

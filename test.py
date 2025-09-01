@@ -11,6 +11,7 @@ import numpy as np
 import importlib.util
 
 from transformers.trainer import Trainer
+from peft import LoraConfig, get_peft_model
 
 from transformers import (
     AutoTokenizer,
@@ -108,10 +109,12 @@ class EvaluationRunner:
             
         base_model = AutoModelForSequenceClassification.from_pretrained(pretrained_model_name, config=model_auto_config)
         
+
+        model = PeftModel.from_pretrained(base_model, self.model_path)
+        model.print_trainable_parameters()
+
         if 'peft_method' in self.config['model'] and self.config['model']['peft_method'] == 'PCLORA':
             model.set_all_lambda_w(float(self.config['model']['lambda']))
-        else:
-            model = base_model
 
         return model.to(self.device)
 

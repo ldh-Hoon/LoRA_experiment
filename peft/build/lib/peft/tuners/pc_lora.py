@@ -112,7 +112,7 @@ class PCLoraConfig(PeftConfig):
     )
 
     def __post_init__(self):
-        self.peft_type = PeftType.LORA
+        self.peft_type = PeftType.PCLORA
 
 
 class PCLoraModel(torch.nn.Module):
@@ -277,7 +277,7 @@ class PCLoraModel(torch.nn.Module):
             print("target embed")
             PCEmbedding_kwargs = kwargs.copy()
             PCEmbedding_kwargs.pop("fan_in_fan_out", None)
-            in_features, out_features = target.num_PCEmbeddings, target.PCEmbedding_dim
+            in_features, out_features = target.num_PCEmbeddings, target.Embedding_dim
             new_module = PCEmbedding(adapter_name, in_features, out_features, **PCEmbedding_kwargs)
         elif isinstance(target, torch.nn.Conv2d):
             print("target PCConv2d")
@@ -868,13 +868,13 @@ class PCLinear(nn.Linear, PCLoraLayer):
             
 
         if self.active_adapter not in self.lora_A.keys():
-            return F.PCLinear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
+            return F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
         if self.disable_adapters:
             if self.r[self.active_adapter] > 0 and self.merged:
                 self.unmerge()
-            result = F.PCLinear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
+            result = F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
         elif self.r[self.active_adapter] > 0 and not self.merged:
-            result = F.PCLinear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
+            result = F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
             result = result * self.lambda_w[self.active_adapter]
 
             x = x.to(self.lora_A[self.active_adapter].weight.dtype)
@@ -887,7 +887,7 @@ class PCLinear(nn.Linear, PCLoraLayer):
                 
             )
         else:
-            result = F.PCLinear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
+            result = F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
 
         result = result.to(previous_dtype)
 
@@ -941,7 +941,7 @@ class PCEmbedding(nn.Embedding, PCLoraLayer):
 
         if self.only_lora:
             if self.r[self.active_adapter] > 0:
-                after_A = F.PCEmbedding(
+                after_A = F.Embedding(
                     x,
                     self.lora_PCEmbedding_A[self.active_adapter].T,
                     self.padding_idx,
@@ -964,7 +964,7 @@ class PCEmbedding(nn.Embedding, PCLoraLayer):
         elif self.r[self.active_adapter] > 0 and not self.merged:
             result = nn.Embedding.forward(self, x)
             if self.r[self.active_adapter] > 0:
-                after_A = F.PCEmbedding(
+                after_A = F.Embedding(
                     x,
                     self.lora_PCEmbedding_A[self.active_adapter].T,
                     self.padding_idx,
@@ -1042,7 +1042,7 @@ class PCConv2d(nn.Conv2d, PCLoraLayer):
         else:
             # PCConv2d 3x3
             return (
-                F.PCConv2d(
+                F.Conv2d(
                     self.lora_A[adapter].weight.permute(1, 0, 2, 3),
                     self.lora_B[adapter].weight,
                 ).permute(1, 0, 2, 3)
@@ -1066,7 +1066,7 @@ class PCConv2d(nn.Conv2d, PCLoraLayer):
                 return x.to(previous_dtype)
 
         if self.active_adapter not in self.lora_A.keys():
-            return F.PCConv2d(
+            return F.Conv2d(
                 x,
                 self.weight,
                 bias=self.bias,
@@ -1078,7 +1078,7 @@ class PCConv2d(nn.Conv2d, PCLoraLayer):
         if self.disable_adapters:
             if self.r[self.active_adapter] > 0 and self.merged:
                 self.unmerge()
-            result = F.PCConv2d(
+            result = F.Conv2d(
                 x,
                 self.weight,
                 bias=self.bias,
@@ -1088,7 +1088,7 @@ class PCConv2d(nn.Conv2d, PCLoraLayer):
                 groups=self.groups,
             )
         elif self.r[self.active_adapter] > 0 and not self.merged:
-            result = F.PCConv2d(
+            result = F.Conv2d(
                 x,
                 self.weight,
                 bias=self.bias,
@@ -1108,7 +1108,7 @@ class PCConv2d(nn.Conv2d, PCLoraLayer):
                 
             )
         else:
-            result = F.PCConv2d(
+            result = F.Conv2d(
                 x,
                 self.weight,
                 bias=self.bias,

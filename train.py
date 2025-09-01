@@ -18,7 +18,7 @@ from transformers import (
     Trainer,
     DataCollatorWithPadding
 )
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, get_peft_model, PCLoraConfig
 from trainer.PCLoRA_trainer import PCTrainer
 
 class ExperimentRunner:
@@ -159,7 +159,7 @@ class ExperimentRunner:
             model = get_peft_model(model, lora_config)
             model.print_trainable_parameters()
         elif 'peft_method' in model_config and model_config['peft_method'] == 'PCLORA':
-            lora_config = LoraConfig(**model_config['lora_config'])
+            lora_config = PCLoraConfig(**model_config['lora_config'])
             model = get_peft_model(model, lora_config)
             model.print_trainable_parameters()
              
