@@ -22,6 +22,7 @@ conda activate 후
 ---
 
 python train.py --config_path configs/boolq_llama3_2_1b.yaml
+
 python train.py --config_path configs/pclora_boolq_llama3_2_1b.yaml
 
 
