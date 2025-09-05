@@ -33,6 +33,10 @@ class EvaluationRunner:
         self.tokenizer = self._load_tokenizer()
         self.validation_dataset = self._load_and_preprocess_dataset()
         self.model = self._load_model()
+        self._print_lora_parameter_ratio()
+        self._remain_pc_lora()
+        self._print_lora_parameter_ratio()
+
         self.trainer = self._setup_trainer()
 
     def _load_config(self, config_path: str):
@@ -98,6 +102,25 @@ class EvaluationRunner:
             return validation_dataset
         else:
             raise ValueError(f"Unsupported dataset_type: {dataset_type}")
+        
+    def _remain_pc_lora(self):
+        if 'peft_method' in self.config['model'] and self.config['model']['peft_method'] == 'PCLORA':
+            self.model.set_all_lambda_w(float(self.config['model']['lambda']))
+            self.model.set_only_lora(True)
+            self.model.del_weighted_orig_and_optimizer()
+    def _print_lora_parameter_ratio(self):
+        total_params = sum(p.numel() for p in self.model.parameters())
+        lora_params = sum(p.numel() for n, p in self.model.named_parameters() if "lora_" in n)
+        base_params = total_params - lora_params
+
+        total_ratio = lora_params / total_params * 100
+        base_ratio = lora_params / base_params * 100
+
+        print(f"Total parameters (base + LoRA): {total_params:,}")
+        print(f"Base model parameters: {base_params:,}")
+        print(f"LoRA parameters: {lora_params:,}")
+        print(f"LoRA ratio vs total: {total_ratio:.4f}%")
+        print(f"LoRA ratio vs base model: {base_ratio:.4f}%")
 
     def _load_model(self):
         pretrained_model_name = self.config['model']['pretrained_model_name']
@@ -112,10 +135,7 @@ class EvaluationRunner:
 
         model = PeftModel.from_pretrained(base_model, self.model_path)
         model.print_trainable_parameters()
-
-        if 'peft_method' in self.config['model'] and self.config['model']['peft_method'] == 'PCLORA':
-            model.set_all_lambda_w(float(self.config['model']['lambda']))
-
+        
         return model.to(self.device)
 
     def _compute_metrics(self, eval_pred):

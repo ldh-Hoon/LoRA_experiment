@@ -641,16 +641,34 @@ class PCLoraModel(torch.nn.Module):
             if isinstance(module, PCLoraLayer):
                 module.only_lora = boo
 
-    def del_weighted_orig(self):
+    def del_weighted_orig_and_optimizer(self, optimizer=None):
         """
-        Deletes the original model weights to save memory.
+        Deletes the original model weights in all PCLoraLayer modules to save memory,
+        and optionally clears the optimizer state.
+
+        Args:
+            optimizer (torch.optim.Optimizer, optional): If provided, will also clear optimizer state.
         """
         for name, module in self.model.named_modules():
             if isinstance(module, PCLoraLayer):
                 if hasattr(module, 'weight'):
                     del module.weight
+                    module.register_parameter('weight', None)
                 if hasattr(module, 'bias') and module.bias is not None:
                     del module.bias
+                    module.register_parameter('bias', None)
+                # device 관련 참조 초기화
+                if hasattr(module, 'original_device'):
+                    del module.original_device
+
+        if optimizer is not None:
+            optimizer.state = {}  # 모든 momentum, grad, step 등 제거
+            optimizer.param_groups = []  # param_groups 초기화
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
+        print("Original weights deleted and optimizer state cleared (if provided).")
 
 # Below code is based on https://github.com/microsoft/LoRA/blob/main/loralib/layers.py
 # and modified to work with PyTorch FSDP

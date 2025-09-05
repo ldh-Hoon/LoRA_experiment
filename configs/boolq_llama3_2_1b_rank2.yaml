@@ -1,0 +1,34 @@
+task: text_classification # downstream task
+model:
+  pretrained_model_name: "meta-llama/Llama-3.2-1B" # base model
+  model_type: "hub"
+  peft_method: "LORA" # peft method
+  lora_config:
+    peft_type: "LORA"
+    task_type: "SEQ_CLS"
+    r: 2
+    lora_alpha: 16
+    target_modules: ["q_proj", 
+                    "k_proj", 
+                    "v_proj", 
+                    "o_proj", 
+                    "gate_proj", 
+                    "up_proj", 
+                    "down_proj"]
+    lora_dropout: 0.01
+    bias: "none"
+    
+dataset:
+  name: "google/boolq" # dataset name on huggingface hub, or local dataclass in dataset folder
+  path: ""
+  dataset_type: "hub"
+  train_split: "train" # 
+  validation_split: "validation" # validation, test etc
+
+training:
+  epochs: 10
+  batch_size: 1
+  learning_rate: 1e-5
+  weight_decay: 0.01
+  gradient_accumulation_steps: 2
+  device: "cuda"
