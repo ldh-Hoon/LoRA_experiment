@@ -3,7 +3,7 @@ pip install -r requirements.txt
 
 cd peft
 
-pip install e .
+pip install -e . 
 
 cd ..
 
